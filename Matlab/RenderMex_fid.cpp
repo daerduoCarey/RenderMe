@@ -23,8 +23,6 @@ Proceedings of ACM SIGGRAPH Asia 2008
 #include <GL/glu.h>
 #include <cstring>
 
-#include "vector3.h"
-
 void uint2uchar(unsigned int in, unsigned char* out){
   out[0] = (in & 0x00ff0000) >> 16;
   out[1] = (in & 0x0000ff00) >> 8;
@@ -47,6 +45,11 @@ unsigned int uchar2uint(unsigned char* in){
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
   mexPrintf("RenderMex_modified\n"); 
 
+  float m_near = 1;
+  float m_far = 100;
+  int m_level = 0;
+  
+  int m_linewidth = 1;
   int m_pointsize = 1;
 
   double* view_mat = mxGetPr(prhs[0]); // 4x4 matrix
@@ -55,12 +58,10 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
   int m_height = (int)mxGetScalar(prhs[3]);
   double*       vertex = mxGetPr(prhs[4]); // 3xn double vertices matrix
   unsigned int  num_vertex = mxGetN(prhs[4]);
-  unsigned int* face = (unsigned int*) mxGetData(prhs[5]); // 3xn uint32 face matrix
-  unsigned int  num_face = mxGetN(prhs[5]);
-
-  double* lp0 = mxGetPr(prhs[6]);	// position of light one
-  double* lp1 = mxGetPr(prhs[7]);	// position of light two
-  double* lp2 = mxGetPr(prhs[8]);	// position of light three
+  unsigned int* edge = (unsigned int*) mxGetData(prhs[5]); // 2xn uint32 edge matrix
+  unsigned int  num_edge = mxGetN(prhs[5]);
+  unsigned int* face = (unsigned int*) mxGetData(prhs[6]); // 3xn uint32 face matrix
+  unsigned int  num_face = mxGetN(prhs[6]);
 
   // Step 1: setup off-screen mesa's binding 
   OSMesaContext ctx;
@@ -74,47 +75,13 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
 
   // Step 2: Setup basic OpenGL setting
   glEnable(GL_DEPTH_TEST);
-  glEnable(GL_LIGHTING);
+  glDisable(GL_LIGHTING);
   glEnable(GL_CULL_FACE);
   glCullFace(GL_BACK);
   glPolygonMode(GL_FRONT, GL_FILL);
-  glClearColor(1, 1, 1, 1);//m_clearColor[0], m_clearColor[1], m_clearColor[2], 1.0f); // this line seems useless
+  glClearColor(0, 0, 0, 1);//m_clearColor[0], m_clearColor[1], m_clearColor[2], 1.0f); // this line seems useless
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   glViewport(0, 0, m_width, m_height);
-
-  // Setup the lighting
-  glEnable(GL_NORMALIZE);
-
-  GLfloat white[] = {1.0f, 1.0f, 1.0f, 1.0f};
-  
-  GLfloat lightColor[] = {0.5f, 0.5f, 0.5f, 1.0f};
-  GLfloat ambientColor[] = {0.2f, 0.2f, 0.2f, 1.0f};
-  
-  GLfloat lightPos0[] = {(float) *lp0, (float) *(lp0+1), (float) *(lp0+2), 1.0f};
-  GLfloat lightPos1[] = {(float) *lp1, (float) *(lp1+1), (float) *(lp1+2), 1.0f};
-  GLfloat lightPos2[] = {(float) *lp2, (float) *(lp2+1), (float) *(lp2+2), 1.0f};
-  
-  glEnable(GL_LIGHT0);
-  glLightfv(GL_LIGHT0, GL_DIFFUSE, lightColor);
-  glLightfv(GL_LIGHT0, GL_SPECULAR, lightColor);
-  glLightfv(GL_LIGHT0, GL_POSITION, lightPos0);
-  
-  glEnable(GL_LIGHT1);
-  glLightfv(GL_LIGHT1, GL_DIFFUSE, lightColor);
-  glLightfv(GL_LIGHT1, GL_SPECULAR, lightColor);
-  glLightfv(GL_LIGHT1, GL_POSITION, lightPos1);
-  
-  glEnable(GL_LIGHT2);
-  glLightfv(GL_LIGHT2, GL_DIFFUSE, lightColor);
-  glLightfv(GL_LIGHT2, GL_SPECULAR, lightColor);
-  glLightfv(GL_LIGHT2, GL_POSITION, lightPos2);
-  
-  GLfloat faceColor[] = {0.722f, 0.494f, 0.216f, 1.0f};
-  glMaterialf(GL_FRONT, GL_SHININESS, 20);
-  glMaterialfv(GL_FRONT, GL_SPECULAR, faceColor);
-  glMaterialfv(GL_FRONT, GL_DIFFUSE, faceColor);
-  
-  glShadeModel(GL_FLAT);
 
   // matrix is ready. use it
   glMatrixMode(GL_PROJECTION);
@@ -123,38 +90,46 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
   glLoadMatrixd(view_mat);
   
   // Step 3: render the mesh with encoded color from their ID
-  float faceNormal[3];
+  unsigned char colorBytes[3];
   unsigned int base_offset;
-  double *v1, *v2, *v3;
-
+  
   // render face
   base_offset = 1;
   for (unsigned int i = 0; i < num_face; ++i) {
-    v1 = vertex + 3*(*face++);
-    v2 = vertex + 3*(*face++);
-    v3 = vertex + 3*(*face++);
-    
-    vector3 vec1 = vector3(v1);
-    vector3 vec2 = vector3(v2);
-    vector3 vec3 = vector3(v3);
-
-    vec2.sub(vec1);
-    vec3.sub(vec1);
-
-    vec2.cross(vec3);
-    vec2.normalize();
-
-    glBegin(GL_TRIANGLES);
-
-    glNormal3f(vec2.x, vec2.y, vec2.z);
-    
-    glVertex3dv(v1);
-    glVertex3dv(v2);
-    glVertex3dv(v3);
-   
+    uint2uchar(base_offset+i,colorBytes);
+    glColor3ubv(colorBytes);
+    glBegin(GL_POLYGON);
+    glVertex3dv(vertex+3*(*face++));
+    glVertex3dv(vertex+3*(*face++));
+    glVertex3dv(vertex+3*(*face++));
+   // glVertex3dv(vertex+3*(*face++));
     glEnd();
   }
 
+  // render edge
+  base_offset = 1+num_face;
+  glLineWidth(m_linewidth);
+  glBegin(GL_LINES);
+  for (unsigned int i = 0; i < num_edge; ++i) {
+    uint2uchar(base_offset+i,colorBytes);
+    glColor3ubv(colorBytes);
+    glVertex3dv(vertex+3*(*edge++));
+    glVertex3dv(vertex+3*(*edge++));
+  }
+  glEnd();
+
+  // render vertex
+  base_offset = 1+num_face+num_edge;
+  glPointSize(m_pointsize);
+  glBegin(GL_POINTS);
+  for (unsigned int i = 0; i < num_vertex; ++i) {
+    uint2uchar(base_offset+i,colorBytes);
+    glColor3ubv(colorBytes);
+    glVertex3dv(vertex);
+    vertex+=3;
+  }
+  glEnd();
+  
   glFinish(); // done rendering
 
   // Step 5: convert the result from color to interger array

@@ -23,14 +23,25 @@ clear
 clc
 close all
 
-compile
+compile_fid
 
 %load([num2str(i), '.mat']);
 load('tmp.mat');
 
-result = RenderMex(obj.view, obj.proj, obj.img_width, obj.img_height, obj.vertex, obj.face, obj.lp0, obj.lp1, obj.lp2)';
+%result = RenderMex(P, img_width, img_height, vertex, edge, face)';
+result = RenderMex_fid(obj.view, obj.proj, obj.img_width, obj.img_height, obj.vertex, obj.edge, obj.face)';
 result = reshape(result, [3, obj.img_width, obj.img_height]);
 result = permute(result, [3, 2, 1]);
+
+%img = uint8(zeros(obj.img_height, obj.img_width, 3));
+%for i = 1:obj.img_height
+%	for j = 1:obj.img_width
+%		k = (i-1)*obj.img_width + j-1;
+%		img(i, j, 1) = result(3*k+1);
+%		img(i, j, 2) = result(3*k+2);
+%		img(i, j, 3) = result(3*k+3);
+%	end
+%end
 
 max(max(max(result)))
 
